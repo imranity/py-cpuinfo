@@ -1177,12 +1177,79 @@ def get_cpu_info_from_kstat():
 	'flags' : flags
 	}
 
+def get_cpu_info_from_android():
+	'''
+
+	'''
+	# Just return None if there is no getprop
+	if not program_paths('getprop'):
+		return None
+
+	# Just return None if not running on Android
+	is_android = 'android' in run_and_get_stdout(['getprop'], ['grep', '-i', 'ro.com.google.clientidbase'])
+	if not is_android:
+		return None
+
+	hz_actual = run_and_get_stdout(['cat', '/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq'])
+	hz_actual = to_friendly_hz(hz_actual, 3)
+	hz_advertised = run_and_get_stdout(['cat', '/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq'])
+	hz_advertised = to_friendly_hz(hz_advertised, 3)
+
+	cpuinfo = run_and_get_stdout(['cat', '/proc/cpuinfo'])
+
+	# Various fields
+	vendor_id = None
+	processor_brand = None
+	cache_size = 0
+	stepping = 0
+	model = 0
+	family = 0
+
+	# Flags
+	flags = _get_field(cpuinfo, 'Features').lower().split(' ')
+	flags.sort()
+
+	# Get the CPU arch and bits
+	raw_arch_string = platform.machine()
+	arch, bits = parse_arch(raw_arch_string)
+
+	return {
+	'vendor_id' : vendor_id,
+	'brand' : processor_brand,
+
+	'hz_advertised' : to_friendly_hz(hz_advertised, scale),
+	'hz_actual' : to_friendly_hz(hz_actual, 0),
+	'hz_advertised_raw' : to_raw_hz(hz_advertised, scale),
+	'hz_actual_raw' : to_raw_hz(hz_actual, 0),
+
+	'arch' : arch,
+	'bits' : bits,
+	'count' : multiprocessing.cpu_count(),
+	'raw_arch_string' : raw_arch_string,
+
+	'l2_cache_size' : cache_size,
+	'l2_cache_line_size' : 0,
+	'l2_cache_associativity' : 0,
+
+	'stepping' : stepping,
+	'model' : model,
+	'family' : family,
+	'processor_type' : 0,
+	'extended_model' : 0,
+	'extended_family' : 0,
+	'flags' : flags
+	}
+
 def get_cpu_info():
 	info = None
 
 	# Try the Windows registry
 	if not info:
 		info = get_cpu_info_from_registry()
+
+	# Try the Android
+	if not info:
+		info = get_cpu_info_from_android()
 
 	# Try /proc/cpuinfo
 	if not info:
