@@ -771,67 +771,88 @@ def _get_field(raw_string, *field_names):
 
 	return None
 
-def get_cpu_info_from_proc_cpuinfo():
+
+class BaseCPUInfo(object):
+	def get_fields(self):
+		output = self._get_data()
+		if not output:
+			return None
+
+		fields = self._parse_data(output)
+		return fields
+
+	def _get_data(self):
+		return None
+
+	def _parse_data(output, self):
+		return None
+
+
+class CPUInfoProcCpuinfo(BaseCPUInfo):
 	'''
 	Returns the CPU info gathered from /proc/cpuinfo. Will return None if
 	/proc/cpuinfo is not found.
 	'''
-	# Just return None if there is no cpuinfo
-	if not os.path.exists('/proc/cpuinfo'):
-		return None
+	def _get_data(self):
+		# Just return None if there is no cpuinfo
+		if not os.path.exists('/proc/cpuinfo'):
+			return None
 
-	output = run_and_get_stdout(['cat', '/proc/cpuinfo'])
+		output = run_and_get_stdout(['cat', '/proc/cpuinfo'])
 
-	# Various fields
-	vendor_id = _get_field(output, 'vendor_id', 'vendor id', 'vendor')
-	processor_brand = _get_field(output, 'model name','cpu')
-	cache_size = _get_field(output, 'cache size')
-	stepping = int(_get_field(output, 'stepping'))
-	model = int(_get_field(output, 'model'))
-	family = int(_get_field(output, 'cpu family'))
+		return output
 
-	# Flags
-	flags = _get_field(output, 'flags', 'Features').split()
-	flags.sort()
+	def _parse_data(self, output):
+		# Various fields
+		vendor_id = _get_field(output, 'vendor_id', 'vendor id', 'vendor')
+		processor_brand = _get_field(output, 'model name','cpu')
+		cache_size = _get_field(output, 'cache size')
+		stepping = int(_get_field(output, 'stepping'))
+		model = int(_get_field(output, 'model'))
+		family = int(_get_field(output, 'cpu family'))
 
-	# Convert from MHz string to Hz
-	hz_actual = _get_field(output, 'cpu MHz', 'cpu speed', 'clock')
-	hz_actual = hz_actual.lower().rstrip('mhz').strip()
-	hz_actual = to_hz_string(hz_actual)
+		# Flags
+		flags = _get_field(output, 'flags', 'Features').split()
+		flags.sort()
 
-	# Convert from GHz/MHz string to Hz
-	scale, hz_advertised = _get_hz_string_from_brand(processor_brand)
+		# Convert from MHz string to Hz
+		hz_actual = _get_field(output, 'cpu MHz', 'cpu speed', 'clock')
+		hz_actual = hz_actual.lower().rstrip('mhz').strip()
+		hz_actual = to_hz_string(hz_actual)
 
-	# Get the CPU arch and bits
-	raw_arch_string = platform.machine()
-	arch, bits = parse_arch(raw_arch_string)
+		# Convert from GHz/MHz string to Hz
+		scale, hz_advertised = _get_hz_string_from_brand(processor_brand)
 
-	return {
-	'vendor_id' : vendor_id,
-	'brand' : processor_brand,
+		# Get the CPU arch and bits
+		raw_arch_string = platform.machine()
+		arch, bits = parse_arch(raw_arch_string)
 
-	'hz_advertised' : to_friendly_hz(hz_advertised, scale),
-	'hz_actual' : to_friendly_hz(hz_actual, 6),
-	'hz_advertised_raw' : to_raw_hz(hz_advertised, scale),
-	'hz_actual_raw' : to_raw_hz(hz_actual, 6),
+		return {
+		'vendor_id' : vendor_id,
+		'brand' : processor_brand,
 
-	'arch' : arch,
-	'bits' : bits,
-	'count' : multiprocessing.cpu_count(),
-	'raw_arch_string' : raw_arch_string,
+		'hz_advertised' : to_friendly_hz(hz_advertised, scale),
+		'hz_actual' : to_friendly_hz(hz_actual, 6),
+		'hz_advertised_raw' : to_raw_hz(hz_advertised, scale),
+		'hz_actual_raw' : to_raw_hz(hz_actual, 6),
 
-	'l2_cache_size' : cache_size,
-	'l2_cache_line_size' : 0,
-	'l2_cache_associativity' : 0,
+		'arch' : arch,
+		'bits' : bits,
+		'count' : multiprocessing.cpu_count(),
+		'raw_arch_string' : raw_arch_string,
 
-	'stepping' : stepping,
-	'model' : model,
-	'family' : family,
-	'processor_type' : 0,
-	'extended_model' : 0,
-	'extended_family' : 0,
-	'flags' : flags
-	}
+		'l2_cache_size' : cache_size,
+		'l2_cache_line_size' : 0,
+		'l2_cache_associativity' : 0,
+
+		'stepping' : stepping,
+		'model' : model,
+		'family' : family,
+		'processor_type' : 0,
+		'extended_model' : 0,
+		'extended_family' : 0,
+		'flags' : flags
+		}
 
 def get_cpu_info_from_dmesg():
 	'''
@@ -1191,7 +1212,8 @@ def get_cpu_info():
 
 	# Try /proc/cpuinfo
 	if not info:
-		info = get_cpu_info_from_proc_cpuinfo()
+		info_getter = CPUInfoProcCpuinfo()
+		info = info_getter.get_fields()
 
 	# Try sysctl
 	if not info:
@@ -1212,6 +1234,7 @@ def get_cpu_info():
 	return info
 
 def main():
+	# FIXME: This should print an error and return 1 if it returns None
 	info = get_cpu_info()
 
 	print('Vendor ID: {0}'.format(info['vendor_id']))
